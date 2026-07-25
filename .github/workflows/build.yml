@@ -25,7 +25,7 @@ jobs:
 
       # CGO (sqlite) means the arm64 half compiles under qemu emulation —
       # slow but hands-off; the Dockerfile is already multi-arch aware.
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
 
       - uses: docker/setup-buildx-action@v3
 
