@@ -1,5 +1,5 @@
 # Stage 1: admin UI (embedded into the Go binary).
-FROM node:22 AS ui
+FROM node:25 AS ui
 WORKDIR /src/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-fund --no-audit
