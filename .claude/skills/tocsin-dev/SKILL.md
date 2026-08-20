@@ -280,6 +280,38 @@ admin, open the room, "Verify user" on the bot — it auto-accepts SAS.
   re-verifies automatically as a new device.
 - **Bot process exits on fatal sync error** (e.g. M_UNKNOWN_TOKEN) — by
   design; just restart it, it self-heals.
+- **Every message shows "Unable to decrypt message" in clients** — the
+  megolm session was shared with zero devices. mautrix only learns other
+  users' devices from `device_lists.changed` in `/sync`, and
+  `ShareGroupSession` refetches keys only for users the crypto store has
+  *never* seen (`GetDevices` returns nil); a user that is tracked but whose
+  `crypto_device` rows are gone is logged `user has no devices, skipping`,
+  the share reports success with `destination_map={}`, and the session is
+  then persisted as shared and reused. `internal/matrix/devicekeys.go`
+  guards this: `Client.Crypto` is wrapped so every encrypt first queries
+  keys for members with no known devices and refuses the send when the
+  session would reach nobody (`matrix_notifier_key_share_empty_total`).
+  Diagnose with `tocsin_log_level: debug`: `destination_map` must be
+  non-empty and `device_count` must match the members' device count.
+  **Never "fix" this by deleting `crypto_device` / `crypto_tracked_user`
+  rows** — an emptied-but-tracked user is exactly the unrecoverable state.
+  Messages sent while broken stay unreadable forever; those session keys
+  never left the bot.
+- **Bot logs a healthy send but the recipient sees "Unable to decrypt"** —
+  distinct from the empty-share bug above: here the share genuinely reached
+  devices (`crypto_megolm_outbound_session_shared` has rows for them). Either
+  the peer failed to import the megolm session, or the olm session is wedged
+  so the room key never arrived. Neither self-heals — the stored session is
+  reused until expiry. Fix: `tocsin unwedge -c cfg --room '!id' [--user '@who']`
+  (`cmd/tocsin/unwedge.go`), which discards the outbound megolm sessions and
+  optionally the olm sessions so the next send re-shares from scratch. Safe
+  on a live bot. **Diagnose before deploying anything**: query the crypto
+  store first — `crypto_megolm_outbound_session`, its `_shared` table, and
+  `crypto_device` — to confirm whether the share actually reached the peer's
+  devices. On prod, `URI=$(sudo grep -oP '(?<=uri: ")[^"]+' /data/tocsin/config/config.yaml); psql "$URI" ...`.
+  **Note synapse's own DB is the `postgres-matrix_maurice_fr` CONTAINER
+  (`synapse_matrix_maurice_fr`), not the host postgres** — the host has a
+  stale leftover `synapse` DB that will silently give you months-old answers.
 - **"room is not encrypted" on a room that is** — stale state store; the
   bot refetches `/state` automatically at send time. If creating a channel
   by `#alias`, the alias is resolved once and the ID is stored (all internal

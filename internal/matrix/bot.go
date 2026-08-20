@@ -133,7 +133,10 @@ func (b *Bot) Start(ctx context.Context) error {
 	if err := b.helper.Init(ctx); err != nil {
 		return fmt.Errorf("initializing e2ee: %w", err)
 	}
-	b.client.Crypto = b.helper
+	// Wrapped, not the bare helper: every room send goes through
+	// Client.Crypto.Encrypt, which is where recipient device keys get
+	// bootstrapped and a share that would reach nobody is rejected.
+	b.client.Crypto = &keyBootstrapCrypto{CryptoHelper: b.helper, bot: b}
 	log.Info("logged in", "user_id", b.client.UserID, "device_id", b.client.DeviceID)
 
 	// Interactive (SAS) verification support: registered before syncing so no
@@ -166,6 +169,18 @@ func (b *Bot) Start(ctx context.Context) error {
 
 	if err := b.ensureVerified(ctx); err != nil {
 		return fmt.Errorf("bootstrapping device verification: %w", err)
+	}
+
+	// A megolm session's key is delivered exactly once, when the session is
+	// first shared. If that delivery silently fails for a recipient, every
+	// message in the session is unreadable for them for its whole lifetime
+	// (a week by default) and nothing detects it. Starting each run with
+	// fresh sessions bounds that damage to a single bot lifetime; the cost
+	// is one extra key share per active room per restart.
+	if res, err := Unwedge(ctx, b.cfg, "", ""); err != nil {
+		log.Warn("could not rotate outbound megolm sessions at startup", "error", err)
+	} else if res.OutboundSessions > 0 {
+		log.Info("rotated outbound megolm sessions at startup", "sessions", res.OutboundSessions)
 	}
 
 	go b.metricsLoop(ctx)
