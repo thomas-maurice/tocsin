@@ -71,6 +71,8 @@ producer instead of flooding a room.
   latency, chart render outcomes and duration, **sync age**, queued
   deliveries (`matrix_notifier_outbox_pending`), and device verification
   status. Scrape it and alert on `matrix_notifier_sync_age_seconds`.
+  `matrix_notifier_key_share_empty_total` counts sends refused because no
+  recipient device was known — alert on any increase (see below).
 - `GET /health` — reflects real Matrix state: 200 when logged in and syncing
   recently, 503 (with a reason) when the sync has stalled, so traefik and
   docker detect a zombie the fatal-exit path wouldn't catch.
@@ -134,6 +136,49 @@ bootstraps **cross-signing** on first run (recovery key persisted in
 `data_dir`), signs its own device — so it shows up verified — and refuses to
 send to a room that is not encrypted. If the sync loop dies fatally (revoked
 token), the process exits loudly; restarting it self-heals.
+
+### Recipient key bootstrap
+
+Before every encrypted send the bot checks that the crypto store actually
+knows a device for each room member, and queries `/keys/query` for the ones
+it does not. This is not redundant with mautrix's own handling: mautrix
+learns about other users' devices only from `device_lists.changed` in
+`/sync` (and that handler only queries users it already tracks), while the
+group-session share refetches keys only for users it has *never* heard of.
+A member that is tracked but whose device list ended up empty is skipped
+silently — the megolm session is shared with zero devices, marked shared,
+persisted, and reused, so every message in that session arrives as *Unable
+to decrypt message* while the send reports success.
+
+If, after the key query, the session would still reach no device at all,
+the send is **refused** rather than delivered as unreadable ciphertext:
+the error surfaces on the outbox entry and
+`matrix_notifier_key_share_empty_total` increments. If only *some* members
+have no devices, the send proceeds and those users are named in a warning
+log — they will not be able to read it.
+
+### When a recipient still cannot decrypt
+
+Correct key sharing is not sufficient on its own. Two states leave a peer
+stuck and neither recovers by itself: a megolm session the peer failed to
+import (reused until it expires, so every message in it is unreadable for
+them), and a wedged olm session (the bot thinks it has a working channel to
+a device, but that device cannot decrypt what the bot encrypts, so the room
+key never arrives). In both cases the bot's own logs and metrics look
+perfectly healthy.
+
+`tocsin unwedge` throws that state away so the next send rebuilds it:
+
+```sh
+# force a fresh megolm session for one room
+tocsin unwedge -c config.yaml --room '!room:example.org'
+# also claim fresh one-time keys for a specific user's devices
+tocsin unwedge -c config.yaml --room '!room:example.org' --user '@peer:example.org'
+```
+
+It is safe against a running bot — it only removes regenerable state.
+Messages already sent with the discarded session stay unreadable: their keys
+were never successfully delivered, and nothing can reissue them.
 
 ## Interactive verification (green shield)
 

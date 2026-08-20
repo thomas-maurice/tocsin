@@ -69,6 +69,24 @@ var (
 		Help: "Notifications queued and awaiting delivery.",
 	})
 
+	// KeyShareEmpty counts sends refused because no recipient device could
+	// be resolved for the room: the megolm session would have been shared
+	// with nobody and the message would arrive undecryptable. Alert on any
+	// increase — this is the signal the silent key-share failure lacked.
+	KeyShareEmpty = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "matrix_notifier_key_share_empty_total",
+		Help: "Sends refused because no recipient device was known for the room.",
+	})
+
+	// SessionsDiscarded counts stored megolm sessions thrown away because
+	// they had reached no device: every message encrypted with them was
+	// undecryptable. A non-zero value means a poisoned session was found
+	// and recovered from.
+	SessionsDiscarded = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "matrix_notifier_megolm_sessions_discarded_total",
+		Help: "Stored megolm sessions discarded because they reached no device.",
+	})
+
 	// Verified reports whether the bot's device is cross-signed (1) or not.
 	Verified = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "matrix_notifier_device_verified",
