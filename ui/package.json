@@ -10,14 +10,14 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.12.1",
+    "@bufbuild/protobuf": "^2.14.0",
     "@connectrpc/connect": "^2.1.2",
     "@connectrpc/connect-web": "^2.1.2",
     "@fortawesome/fontawesome-free": "^7.3.1",
-    "@lucide/vue": "^1.25.0",
+    "@lucide/vue": "^1.33.0",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.6.0",
-    "vue": "^3.5.13",
+    "vue": "^3.5.41",
     "vue3-toastify": "^0.2.9"
   },
   "devDependencies": {
@@ -27,6 +27,6 @@
     "typescript": "~5.9",
     "vite": "^6.0.0",
     "vitest": "^3.0.0",
-    "vue-tsc": "^3.3.7"
+    "vue-tsc": "^3.3.10"
   }
 }
