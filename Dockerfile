@@ -8,7 +8,7 @@ RUN npm run build
 
 # Stage 2: Go binary. CGO is required by the SQLite crypto store, so each
 # target platform compiles natively (buildx + qemu for cross-arch).
-FROM golang:1.26-bookworm AS build
+FROM golang:1.27-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
